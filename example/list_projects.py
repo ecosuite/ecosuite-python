@@ -2,10 +2,9 @@ import getpass
 from typing import List
 
 from ecosuite_python import AuthenticatedClient
-from ecosuite_python.api.project import projects
+from ecosuite_python.api.energy import status
+from ecosuite_python.models.energy_status_sites import EnergyStatusSites
 from ecosuite_python.models.error import Error
-from ecosuite_python.models.project import Project
-from ecosuite_python.types import Response
 
 from pycognito import Cognito
 from pycognito.exceptions import SoftwareTokenMFAChallengeException
@@ -28,18 +27,34 @@ print("Authenticated with Ecosuite")
 client = AuthenticatedClient(base_url="https://api.ecosuite.io", token=u.id_token)
 
 # Use the async function if needed
-result = projects.sync(client=client)
+result = status.sync(client=client)
+
+def print_devices(system):
+    for device in system["devices"]:
+        print(f'\t\t\t- /{device["type"]}/{device["id"]}')
 
 if isinstance(result, Error):
     print(f'Failed to fetch projects: ${result.message}')
 else:
     if result is None:
-        print("Projects missing from response")
+        print("Status missing from response")
     else:
         if isinstance(result.projects, List):
-            l = len(result.projects)
-            print(f'Fetched {l}:')
+
+            # For each project,
             for project in result.projects:
-                print(f'{project.name} -> {project.code}')
+                print(f'{project.name} [{project.code}]')
+
+                # If the API gave us any sites,
+                if isinstance(project.sites, EnergyStatusSites):
+
+                    # Convert the sites to a dictionary
+                    for site_name, site in project.sites.to_dict().items():
+                        print(f'\t{site["name"]} [{site["code"]}]')
+
+                        for system_name, system in site["systems"].items():
+                            print(f'\t\t{system["name"]} [{system["code"]}]')
+                            print_devices(system)
+
 
 
