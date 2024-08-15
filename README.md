@@ -1,13 +1,12 @@
 # ecosuite-python
-This repository contains Python bindings for Ecosuite[1] and SolarNetwork[2].
-This project uses Poetry[3], and is derived from the OpenAPI[4] specification
-that is publicly available[5] for Ecosuite.
+This repository contains Python bindings for Ecosuite[1].
+This project uses Poetry[2], and is derived from the OpenAPI[3] specification
+that is publicly available[4] for Ecosuite.
 
 [1]: https://ecosuite.io/
-[2]: https://solarnetwork.net/
-[3]: https://python-poetry.org/
-[4]: https://www.openapis.org/
-[5]: https://openapi.ecosuite.io/
+[2]: https://python-poetry.org/
+[3]: https://www.openapis.org/
+[4]: https://openapi.ecosuite.io/
 
 ## Authentication
 
