@@ -1,11 +1,17 @@
 import getpass
+import asyncio
 from typing import List
 
 from ecosuite_python import AuthenticatedClient
+
 from ecosuite_python.api.energy import status
+from ecosuite_python.api.solarnetwork import project_device_meta_data
+
 from ecosuite_python.models.energy_status_sites import EnergyStatusSites
+from ecosuite_python.models.solar_network_meta_data import SolarNetworkMetaData
 from ecosuite_python.models.error import Error
 
+from ecosuite_python.models.solar_network_meta_data_sources import SolarNetworkMetaDataSources
 from pycognito import Cognito
 from pycognito.exceptions import SoftwareTokenMFAChallengeException
 
@@ -26,35 +32,77 @@ print("Authenticated with Ecosuite")
 # Use the id token for the Authorization header
 client = AuthenticatedClient(base_url="https://api.ecosuite.io", token=u.id_token)
 
-# Use the async function if needed
-result = status.sync(client=client)
+async def get_project_devices_info(project):
+    code = project.code
+    metadata = await project_device_meta_data.asyncio(code, client=client)
 
-def print_devices(system):
+    # source_id -> dictionary of extra information
+    retval = {}
+
+    if (isinstance(metadata, SolarNetworkMetaData)):
+        if (isinstance(metadata.sources, SolarNetworkMetaDataSources)):
+            for (source_id, properties) in metadata.sources.additional_properties.items():
+                info = properties.to_dict()["deviceInfo"]
+                if info != None:
+                    retval[source_id] = info
+
+    return retval
+
+async def get_project_devices_info_2(project):
+    return [project.code, await get_project_devices_info(project)]
+
+async def get_all_project_metadata(projects):
+    # project_id -> get_project_devices_info(..)
+    metadatas = {}
+    result = await asyncio.gather(*[get_project_devices_info_2(p) for p in projects])
+
+    for pair in result:
+        metadatas[pair[0]] = pair[1]
+
+    return metadatas
+
+# Path is the current path of the system, "/PROJECT/SITE/SYSTEM"
+# We're using it to match the device ID against the metadata
+def print_devices(path, metadata, system):
     for device in system["devices"]:
+        device_id = f'{path}/{device["type"]}/{device["id"]}'
         print(f'\t\t\t- /{device["type"]}/{device["id"]}')
 
-if isinstance(result, Error):
-    print(f'Failed to fetch projects: ${result.message}')
-else:
-    if result is None:
-        print("Status missing from response")
+        if device_id in metadata:
+            meta = metadata[device_id]
+
+            for (k, v) in meta.items():
+                print(f'\t\t\t\t - {k} = {v}')
+
+async def main():
+    result = await status.asyncio(client=client)
+
+    if isinstance(result, Error):
+        print(f'Failed to fetch projects: ${result.message}')
     else:
-        if isinstance(result.projects, List):
+        if result is None:
+            print("Status missing from response")
+        else:
+            if isinstance(result.projects, List):
 
-            # For each project,
-            for project in result.projects:
-                print(f'{project.name} [{project.code}]')
+                metadatas = await get_all_project_metadata(result.projects)
 
-                # If the API gave us any sites,
-                if isinstance(project.sites, EnergyStatusSites):
+                # For each project,
+                for project in result.projects:
+                    print(f'{project.name} [{project.code}]')
 
-                    # Convert the sites to a dictionary
-                    for site_name, site in project.sites.to_dict().items():
-                        print(f'\t{site["name"]} [{site["code"]}]')
+                    project_metadata = metadatas[project.code]
 
-                        for system_name, system in site["systems"].items():
-                            print(f'\t\t{system["name"]} [{system["code"]}]')
-                            print_devices(system)
+                    # If the API gave us any sites,
+                    if isinstance(project.sites, EnergyStatusSites):
 
+                        # Convert the sites to a dictionary
+                        for site_name, site in project.sites.to_dict().items():
+                            print(f'\t{site["name"]} [{site["code"]}]')
 
+                            for system_name, system in site["systems"].items():
+                                print(f'\t\t{system["name"]} [{system["code"]}]')
+                                print_devices(f'/{project.code}/{site["code"]}/{system["code"]}', project_metadata, system)
+
+asyncio.run(main())
 
